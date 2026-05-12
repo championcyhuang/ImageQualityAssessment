@@ -141,3 +141,61 @@ def test_noise_noisy_image():
     result_noisy = noise(pp_noisy)
 
     assert result_clean.global_score > result_noisy.global_score
+
+
+from scorer.metrics.color_accuracy import color_accuracy
+from scorer.metrics.white_balance import white_balance
+from scorer.metrics.dynamic_range import dynamic_range
+from scorer.metrics.texture import texture_preservation
+from scorer.metrics.uniformity import uniformity
+from scorer.metrics.fringing import fringing
+
+
+def test_color_accuracy_neutral():
+    """Neutral image (Cb=Cr=0) gets high color accuracy score."""
+    pp = make_preprocessed(cb_array=np.zeros((64, 64), dtype=np.float32),
+                           cr_array=np.zeros((64, 64), dtype=np.float32))
+    result = color_accuracy(pp)
+    assert result.global_score > 60
+    assert "delta_c" in result.metadata
+
+
+def test_white_balance_gray_world():
+    """Image satisfying gray-world assumption gets high WB score."""
+    pp = make_preprocessed(cb_array=np.zeros((64, 64), dtype=np.float32),
+                           cr_array=np.zeros((64, 64), dtype=np.float32))
+    result = white_balance(pp)
+    assert result.global_score > 60
+
+
+def test_dynamic_range():
+    """Full-range image gets reasonable DR score."""
+    y = np.linspace(0.02, 0.98, 64 * 64).reshape(64, 64).astype(np.float32)
+    pp = make_preprocessed(y_array=y)
+    result = dynamic_range(pp)
+    assert result.global_score > 30
+    assert "dr_stops" in result.metadata
+
+
+def test_texture_preservation():
+    """Image with detail zone gets texture score."""
+    y = np.full((64, 64), 0.5, dtype=np.float32)
+    y[16:48, 16:48] += np.random.randn(32, 32).astype(np.float32) * 0.02
+    pp = make_preprocessed(y_array=y)
+    result = texture_preservation(pp)
+    assert 0 <= result.global_score <= 100
+
+
+def test_uniformity_perfect():
+    """Uniform image gets high uniformity score."""
+    pp = make_preprocessed()
+    result = uniformity(pp)
+    assert result.global_score > 70
+    assert "corner_vs_center_luma_ratio" in result.metadata
+
+
+def test_fringing_none():
+    """Image with no edges has no color fringing."""
+    pp = make_preprocessed()
+    result = fringing(pp)
+    assert result.global_score > 90  # no edges = no fringing
