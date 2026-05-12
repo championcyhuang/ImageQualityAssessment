@@ -34,6 +34,8 @@ from scorer.preprocess.roi import generate_roi_masks
 from scorer.metrics.exposure import exposure
 from scorer.metrics.brightness import brightness
 from scorer.metrics.contrast import contrast
+from scorer.metrics.sharpness import sharpness
+from scorer.metrics.noise import noise
 
 
 def make_preprocessed(y_array=None, cb_array=None, cr_array=None):
@@ -94,3 +96,48 @@ def test_contrast_high_contrast():
     pp = make_preprocessed(y_array=y)
     result = contrast(pp)
     assert result.global_score > 40
+
+
+def test_sharpness_blurry_image():
+    """Blurred image gets lower sharpness score than sharp edges."""
+    # Create an edge image, blur it
+    y_sharp = np.zeros((64, 64), dtype=np.float32)
+    y_sharp[:, 32:] = 1.0  # sharp vertical edge
+    pp_sharp = make_preprocessed(y_array=y_sharp)
+    result_sharp = sharpness(pp_sharp)
+
+    # Blur the edge
+    import cv2
+    y_blurry = cv2.GaussianBlur(y_sharp, (5, 5), 2.0)
+    pp_blurry = make_preprocessed(y_array=y_blurry)
+    result_blurry = sharpness(pp_blurry)
+
+    assert result_sharp.global_score > result_blurry.global_score
+    assert "edge_width" in result_sharp.metadata
+
+
+def test_noise_uniform_image():
+    """Clean uniform image gets high noise score."""
+    y = np.full((64, 64), 0.5, dtype=np.float32)
+    cb = np.zeros((64, 64), dtype=np.float32)
+    cr = np.zeros((64, 64), dtype=np.float32)
+    pp = make_preprocessed(y_array=y, cb_array=cb, cr_array=cr)
+    result = noise(pp)
+    assert result.global_score > 70
+    assert "snr_db" in result.metadata
+
+
+def test_noise_noisy_image():
+    """Noisy image gets lower noise score."""
+    np.random.seed(0)
+    y = np.full((64, 64), 0.5, dtype=np.float32) + np.random.randn(64, 64).astype(np.float32) * 0.05
+    cb = np.random.randn(64, 64).astype(np.float32) * 0.02
+    cr = np.random.randn(64, 64).astype(np.float32) * 0.02
+    pp = make_preprocessed(y_array=y, cb_array=cb, cr_array=cr)
+    result_clean = noise(pp)
+
+    y_noisy = y + np.random.randn(64, 64).astype(np.float32) * 0.10
+    pp_noisy = make_preprocessed(y_array=y_noisy, cb_array=cb, cr_array=cr)
+    result_noisy = noise(pp_noisy)
+
+    assert result_clean.global_score > result_noisy.global_score
