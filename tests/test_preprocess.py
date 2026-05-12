@@ -65,3 +65,37 @@ def test_roi_no_overlap():
         cumulative |= mask
     # The 9 masks should cover the entire image
     assert np.all(cumulative)
+
+
+from scorer.preprocess.feature_maps import compute_gradient_mag, classify_texture
+from scorer.io.image_model import Image
+
+
+def test_gradient_mag_uniform():
+    """Gradient magnitude is zero for uniform image."""
+    y = np.full((32, 32), 0.5, dtype=np.float32)
+    grad = compute_gradient_mag(y)
+    assert np.allclose(grad, 0.0, atol=1e-4)
+
+
+def test_gradient_mag_has_edges():
+    """Gradient magnitude > 0 at sharp transitions."""
+    y = np.zeros((32, 32), dtype=np.float32)
+    y[:, 16:] = 1.0  # vertical edge
+    grad = compute_gradient_mag(y)
+    assert grad[:, 15:17].max() > 0.1
+    assert grad[:, :10].max() < 0.01  # flat region
+
+
+def test_classify_texture():
+    """Texture classification: flat vs detail separation."""
+    np.random.seed(42)
+    flat = np.full((32, 32), 0.5, dtype=np.float32)
+    detail = np.full((32, 32), 0.5, dtype=np.float32) + np.random.randn(32, 32).astype(np.float32) * 0.05
+    y = np.concatenate([flat, detail], axis=1)  # left half flat, right half textured
+
+    detail_mask, flat_mask = classify_texture(y, window_size=8, threshold=0.0005)
+    # Left half should be classified flat
+    assert flat_mask[:, :16].mean() > 0.5
+    # Right half should be classified detail
+    assert detail_mask[:, 16:].mean() > 0.3
