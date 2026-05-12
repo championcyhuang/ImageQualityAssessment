@@ -15,19 +15,19 @@ def print_report(results: list[MetricResult], total_score: float | None = None):
 
     issues = flag_issues(results)
     for r in results:
-        status = "⚠️ 待优化" if r.global_score < 60 else "✓ 正常"
+        status = "[!!] 待优化" if r.global_score < 60 else "[OK] 正常"
         print(f"  {r.name:<14} {r.global_score:>6.1f}  {status:<10}")
 
     print("=" * 70)
 
     if issues:
-        print("\n🔍 问题诊断:")
+        print("\n[问题诊断:]")
         for r in issues:
             print(f"  [{r.name}] 得分 {r.global_score:.1f}")
             print(f"    → {r.diagnosis}")
         print()
 
-    print("💡 调试建议:")
+    print("[调试建议:]")
     _print_recommendations(results)
 
 

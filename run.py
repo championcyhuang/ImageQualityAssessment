@@ -6,6 +6,11 @@ Usage:
 """
 import argparse
 import sys
+
+# Force UTF-8 output on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from scorer.pipeline import run_pipeline
 from scorer.report.console import print_report
 from scorer.report.render import render_report
@@ -38,7 +43,7 @@ def main():
         print("  对比机 vs 待测机 分数差异")
         print("=" * 70)
         for d in output["deltas"]:
-            direction = "↑ 优于" if d["delta"] > 0 else ("↓ 差于" if d["delta"] < 0 else "= 持平")
+            direction = "> better" if d["delta"] > 0 else ("< worse" if d["delta"] < 0 else "= equal")
             print(f"  {d['metric']:<14} 待测:{d['test_score']:>5.1f}  对比:{d['ref_score']:>5.1f}  "
                   f"Δ:{d['delta']:>+6.1f} {direction}")
         print(f"\n  待测机总分: {output['total_score']:.1f}  |  对比机总分: {output['ref_total_score']:.1f}")
@@ -46,7 +51,7 @@ def main():
     # Render visual report
     render_report(output["results"], output["total_score"],
                   output["image_y"], args.output)
-    print(f"\n📊 可视化报告已保存至: {args.output}")
+    print(f"\n[报告] 可视化报告已保存至: {args.output}")
 
 
 if __name__ == "__main__":
