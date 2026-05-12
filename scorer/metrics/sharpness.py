@@ -28,6 +28,11 @@ def sharpness(pp: PreprocessedImage) -> MetricResult:
     # lap_var ~ 5000+ for sharp binary edge, ~100 for blurred
     score = min(100.0, lap_var / 50.0)
 
+    # Uniform image guard: no edges means no blur, not poor sharpness
+    is_uniform = float(y.std()) < 0.01
+    if is_uniform:
+        score = 85.0
+
     mean_grad = float(grad.mean())
 
     # Estimate edge width from gradient profile (simplified MTF-like)
@@ -38,25 +43,31 @@ def sharpness(pp: PreprocessedImage) -> MetricResult:
     heatmap = (heatmap * (100 - score) / 100.0).astype(np.float32)
     region_scores = {}
     for name, mask in pp.roi.items():
-        lap_roi = lap[mask]
-        if lap_roi.size > 0:
-            roi_lap_var = float(lap_roi.var())
-            region_scores[name] = float(min(100.0, roi_lap_var / 50.0))
+        if is_uniform:
+            region_scores[name] = 85.0
         else:
-            region_scores[name] = 0.0
+            lap_roi = lap[mask]
+            if lap_roi.size > 0:
+                roi_lap_var = float(lap_roi.var())
+                region_scores[name] = float(min(100.0, roi_lap_var / 50.0))
+            else:
+                region_scores[name] = 0.0
 
     parts = []
-    # Find worst ROI
-    center_score = region_scores.get("center", 0)
-    edge_scores = [v for k, v in region_scores.items() if "edge" in k]
-    corner_scores = [v for k, v in region_scores.items() if "corner" in k]
+    if is_uniform:
+        parts.append("均匀画面，清晰度不适用")
+    else:
+        # Find worst ROI
+        center_score = region_scores.get("center", 0)
+        edge_scores = [v for k, v in region_scores.items() if "edge" in k]
+        corner_scores = [v for k, v in region_scores.items() if "corner" in k]
 
-    if center_score < 60:
-        parts.append(f"中心区域清晰度不足 (得分{center_score:.1f})")
-    if edge_scores and np.mean(edge_scores) < 60:
-        parts.append(f"边缘区域清晰度不足 (平均{np.mean(edge_scores):.1f})")
-    if corner_scores and np.mean(corner_scores) < 50:
-        parts.append(f"角落区域清晰度明显下降 (平均{np.mean(corner_scores):.1f})")
+        if center_score < 60:
+            parts.append(f"中心区域清晰度不足 (得分{center_score:.1f})")
+        if edge_scores and np.mean(edge_scores) < 60:
+            parts.append(f"边缘区域清晰度不足 (平均{np.mean(edge_scores):.1f})")
+        if corner_scores and np.mean(corner_scores) < 50:
+            parts.append(f"角落区域清晰度明显下降 (平均{np.mean(corner_scores):.1f})")
 
     diagnosis = "；".join(parts) if parts else "清晰度正常"
 

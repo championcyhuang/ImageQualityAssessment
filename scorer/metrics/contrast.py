@@ -39,7 +39,12 @@ def contrast(pp: PreprocessedImage) -> MetricResult:
     # Score: RMS contrast ~0.15 is good, Michelson ~0.8 is good
     rms_score = max(0.0, min(100.0, rms_contrast / 0.20 * 100.0))
     mich_score = max(0.0, min(100.0, michelson / 0.85 * 100.0))
-    score = 0.5 * rms_score + 0.5 * mich_score
+
+    # Uniform image guard: near-zero variation means no content, not poor contrast
+    if float(y.std()) < 0.01:
+        score = 80.0
+    else:
+        score = 0.5 * rms_score + 0.5 * mich_score
 
     heatmap = np.abs(pp.gradient_mag).astype(np.float32)
     # Normalize heatmap
@@ -47,20 +52,27 @@ def contrast(pp: PreprocessedImage) -> MetricResult:
         heatmap = heatmap / heatmap.max() * (100 - score) / 100.0
 
     region_scores = {}
+    is_uniform = float(y.std()) < 0.01
     for name, mask in pp.roi.items():
-        ym = y[mask]
-        mu = ym.mean()
-        if mu > 0:
-            rms_r = float(np.sqrt(np.mean((ym - mu) ** 2)) / mu)
-            region_scores[name] = float(max(0.0, min(100.0, rms_r / 0.20 * 100.0)))
+        if is_uniform:
+            region_scores[name] = 80.0
         else:
-            region_scores[name] = 0.0
+            ym = y[mask]
+            mu = ym.mean()
+            if mu > 0:
+                rms_r = float(np.sqrt(np.mean((ym - mu) ** 2)) / mu)
+                region_scores[name] = float(max(0.0, min(100.0, rms_r / 0.20 * 100.0)))
+            else:
+                region_scores[name] = 0.0
 
     parts = []
-    if rms_contrast < 0.05:
-        parts.append("局部对比度偏低，画面偏平")
-    if michelson < 0.3:
-        parts.append("全局对比度不足")
+    if float(y.std()) < 0.01:
+        parts.append("均匀画面，对比度不适用")
+    else:
+        if rms_contrast < 0.05:
+            parts.append("局部对比度偏低，画面偏平")
+        if michelson < 0.3:
+            parts.append("全局对比度不足")
 
     diagnosis = "；".join(parts) if parts else "对比度正常"
 

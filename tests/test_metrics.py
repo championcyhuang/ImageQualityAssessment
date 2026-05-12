@@ -82,11 +82,12 @@ def test_brightness_midgray():
 
 
 def test_contrast_flat_image():
-    """Uniform image has low contrast score."""
+    """Uniform image is not penalized for lacking contrast (no content defect)."""
     y = np.full((64, 64), 0.5, dtype=np.float32)
     pp = make_preprocessed(y_array=y)
     result = contrast(pp)
-    assert result.global_score < 50  # flat = low contrast
+    assert result.global_score > 70  # uniform = no contrast defect
+    assert "均匀" in result.diagnosis
 
 
 def test_contrast_high_contrast():
