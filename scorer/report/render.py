@@ -2,8 +2,19 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
 from ..metrics import MetricResult
 from ..aggregate import compute_total_score
+
+# Register CJK font and force it as default for all text
+_CJK_FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
+try:
+    font_manager.fontManager.addfont(_CJK_FONT_PATH)
+    _prop = font_manager.FontProperties(fname=_CJK_FONT_PATH)
+    _cjk_name = _prop.get_name()
+    matplotlib.rcParams["font.family"] = _cjk_name
+except Exception:
+    pass
 
 
 def render_report(results: list[MetricResult], total_score: float,
@@ -76,11 +87,11 @@ def _draw_diagnosis_text(ax, results, total_score):
     lines.append(f"综合总分: {total_score:.1f}/100")
     for r in results:
         if r.global_score < 60:
-            lines.append(f"⚠ {r.name}: {r.global_score:.1f} — {r.diagnosis}")
+            lines.append(f"[!!] {r.name}: {r.global_score:.1f} — {r.diagnosis}")
 
     if len(lines) == 1:
         lines.append("所有指标均在正常范围，图像质量合格。")
 
     text = "\n".join(lines)
-    ax.text(0.01, 0.5, text, fontsize=10, fontfamily="monospace",
+    ax.text(0.01, 0.5, text, fontsize=10,
             verticalalignment="center", transform=ax.transAxes)
