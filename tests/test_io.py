@@ -59,3 +59,52 @@ def test_nv12_reader_values():
         assert np.allclose(img.y, expected_y, atol=0.01)
     finally:
         os.unlink(tmp_path)
+
+
+from scorer.io.png_reader import read_png
+
+
+def create_test_png(path, rgb_array):
+    """Helper: write a uint8 RGB array as PNG via PIL."""
+    from PIL import Image as PILImage
+    img = PILImage.fromarray((rgb_array * 255).astype(np.uint8))
+    img.save(path)
+
+
+def test_png_reader_grayscale():
+    """PNG reader converts grayscale to Y channel."""
+    w, h = 32, 32
+    gray = np.full((h, w, 3), 0.5, dtype=np.float32)  # uniform gray RGB
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        tmp_path = f.name
+    create_test_png(tmp_path, gray)
+
+    try:
+        img = read_png(tmp_path)
+        assert img.width == w
+        assert img.height == h
+        assert img.format == "png"
+        assert img.y.shape == (h, w)
+        # Gray image should have Y ≈ 0.5, Cb/Cr ≈ 0
+        assert np.abs(img.y.mean() - 0.5) < 0.1
+    finally:
+        os.unlink(tmp_path)
+
+
+def test_png_reader_color():
+    """PNG reader produces nonzero chroma for colored image."""
+    w, h = 16, 16
+    red = np.zeros((h, w, 3), dtype=np.float32)
+    red[:, :, 0] = 1.0  # pure red
+
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+        tmp_path = f.name
+    create_test_png(tmp_path, red)
+
+    try:
+        img = read_png(tmp_path)
+        # Red should have positive Cr, near-zero Cb
+        assert img.cr.mean() > 0.1
+    finally:
+        os.unlink(tmp_path)
