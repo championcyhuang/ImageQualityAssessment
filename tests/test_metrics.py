@@ -19,10 +19,10 @@ def test_metric_result_creation():
     assert "center" in result.region_scores
 
 
-def test_get_all_metrics_returns_11():
-    """Registry returns 11 metric functions."""
+def test_get_all_metrics_returns_13():
+    """Registry returns 13 metric functions."""
     metrics = get_all_metrics()
-    assert len(metrics) == 11
+    assert len(metrics) == 13
     names = [m.__name__ for m in metrics]
     assert "exposure" in names
     assert "sharpness" in names
@@ -150,6 +150,8 @@ from scorer.metrics.dynamic_range import dynamic_range
 from scorer.metrics.texture import texture_preservation
 from scorer.metrics.uniformity import uniformity
 from scorer.metrics.fringing import fringing
+from scorer.metrics.saturation import saturation
+from scorer.metrics.distortion import distortion
 
 
 def test_color_accuracy_neutral():
@@ -200,3 +202,61 @@ def test_fringing_none():
     pp = make_preprocessed()
     result = fringing(pp)
     assert result.global_score > 90  # no edges = no fringing
+
+
+def test_saturation_neutral():
+    """Neutral saturation (moderate chroma) gets high score."""
+    cb = np.full((64, 64), 0.08, dtype=np.float32)
+    cr = np.full((64, 64), 0.06, dtype=np.float32)
+    pp = make_preprocessed(cb_array=cb, cr_array=cr)
+    result = saturation(pp)
+    assert result.global_score > 85
+    assert "mean_chroma" in result.metadata
+
+
+def test_saturation_desaturated():
+    """Very low chroma image gets low saturation score."""
+    cb = np.zeros((64, 64), dtype=np.float32)
+    cr = np.zeros((64, 64), dtype=np.float32)
+    pp = make_preprocessed(cb_array=cb, cr_array=cr)
+    result = saturation(pp)
+    assert result.global_score < 50
+    assert "欠饱和" in result.diagnosis
+
+
+def test_saturation_oversaturated():
+    """Very high chroma image gets low saturation score."""
+    cb = np.full((64, 64), 0.20, dtype=np.float32)
+    cr = np.full((64, 64), 0.20, dtype=np.float32)
+    pp = make_preprocessed(cb_array=cb, cr_array=cr)
+    result = saturation(pp)
+    assert result.global_score < 70
+    assert "过饱和" in result.diagnosis
+
+
+def test_distortion_flat_image():
+    """Uniform image has too few edges — distortion skipped gracefully."""
+    y = np.full((64, 64), 0.5, dtype=np.float32)
+    pp = make_preprocessed(y_array=y)
+    result = distortion(pp)
+    assert result.global_score == 80.0
+    assert "直线特征不足" in result.diagnosis
+    assert "mean_deviation_px" in result.metadata
+
+
+def test_distortion_straight_edges():
+    """Image with straight edges gets high distortion score."""
+    import cv2
+    y = np.zeros((128, 128), dtype=np.float32)
+    y[40:44, 20:108] = 0.9  # horizontal line
+    y[20:108, 60:64] = 0.9  # vertical line
+    pp = make_preprocessed(y_array=y)
+    # Refresh gradient and edge mask
+    from scorer.preprocess.feature_maps import compute_gradient_mag, compute_edge_mask
+    grad = compute_gradient_mag(y)
+    edge = compute_edge_mask(y)
+    pp.gradient_mag = grad
+    pp.edge_mask = edge
+    result = distortion(pp)
+    assert result.global_score > 60  # straight lines = low distortion
+    assert "contours_analyzed" in result.metadata

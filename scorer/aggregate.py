@@ -13,6 +13,8 @@ DEFAULT_WEIGHTS = {
     "texture_preservation": 1.0,
     "uniformity": 0.8,
     "fringing": 0.5,
+    "saturation": 0.8,
+    "distortion": 0.8,
 }
 
 

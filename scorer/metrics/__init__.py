@@ -33,6 +33,8 @@ from . import dynamic_range  # noqa: E402
 from . import texture  # noqa: E402
 from . import uniformity  # noqa: E402
 from . import fringing  # noqa: E402
+from . import saturation  # noqa: E402
+from . import distortion  # noqa: E402
 
 
 def get_all_metrics() -> list:

@@ -19,7 +19,7 @@ def test_pipeline_perfect_image():
         _write_test_png(tmp, gray)
         output = run_pipeline(tmp)
         assert output["total_score"] > 55
-        assert len(output["results"]) == 11
+        assert len(output["results"]) == 13
     finally:
         os.unlink(tmp)
 
@@ -89,6 +89,6 @@ def test_nv12_pipeline():
     try:
         output = run_pipeline(tmp, width=w, height=h)
         assert output["total_score"] > 0
-        assert len(output["results"]) == 11
+        assert len(output["results"]) == 13
     finally:
         os.unlink(tmp)

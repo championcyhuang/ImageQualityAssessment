@@ -6,10 +6,11 @@ from .image_model import Image
 def read_png(path: str) -> Image:
     """Read PNG as RGB, convert to YCbCr (BT.709)."""
     pil_img = PILImage.open(path).convert("RGB")
-    rgb = np.array(pil_img, dtype=np.float32) / 255.0
+    rgb_uint8 = np.array(pil_img, dtype=np.uint8)
+    rgb = rgb_uint8.astype(np.float32) / 255.0
     h, w = rgb.shape[:2]
     y, cb, cr = _rgb_to_ycbcr_bt709(rgb)
-    return Image(y=y, cb=cb, cr=cr, width=w, height=h, format="png")
+    return Image(y=y, cb=cb, cr=cr, width=w, height=h, format="png", rgb=rgb_uint8)
 
 
 def _rgb_to_ycbcr_bt709(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:

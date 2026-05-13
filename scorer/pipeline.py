@@ -34,6 +34,7 @@ def run_pipeline(image_path: str, width: int | None = None, height: int | None =
         "ref_total_score": None,
         "deltas": None,
         "image_y": img.y,
+        "image_rgb": img.rgb,
     }
 
     # Reference device comparison
@@ -58,7 +59,7 @@ def _read_image(path: str, width: int | None, height: int | None) -> Image:
         if width is None or height is None:
             raise ValueError("NV12 requires --width and --height")
         return read_nv12(path, width, height)
-    elif ext == ".png":
+    elif ext in (".png", ".jpg", ".jpeg"):
         return read_png(path)
     else:
-        raise ValueError(f"Unsupported format: {ext}. Use .nv12 or .png")
+        raise ValueError(f"Unsupported format: {ext}. Use .nv12, .png, .jpg, .jpeg")

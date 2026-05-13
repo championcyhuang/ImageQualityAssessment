@@ -11,3 +11,4 @@ class Image:
     width: int
     height: int
     format: str = "unknown"  # "nv12" or "png"
+    rgb: np.ndarray | None = None  # original RGB uint8 (H,W,3), for PNG sources
