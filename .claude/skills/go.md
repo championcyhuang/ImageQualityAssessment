@@ -8,16 +8,16 @@ description: Use when the user types "go" or asks to run image quality evaluatio
 直接运行:
 
 ```bash
-"F:/AI/AItuning/.venv/Scripts/python.exe" F:/AI/AItuning/go_eval.py
+.venv/Scripts/python.exe go_eval.py
 ```
 
 ## 输入/输出
 
 | | 路径 |
 |---|---|
-| 输入 | `F:\AI\AItuning\需要评估的图片` (.png / .jpg / .jpeg / .nv12) |
-| 输出 | `F:\AI\AItuning\评估报告\{timestamp}\quality_report.html` |
-| 母版 | `F:\AI\AItuning\评估报告母版\report_master.html` |
+| 输入 | `./需要评估的图片/` (.png / .jpg / .jpeg / .nv12) |
+| 输出 | `./评估报告/{timestamp}/quality_report.html` |
+| 母版 | `./评估报告母版/report_master.html` |
 
 ## 行为
 

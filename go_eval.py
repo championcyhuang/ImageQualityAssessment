@@ -38,11 +38,12 @@ def find_images(input_dir: str) -> list[Path]:
 
 def main():
     parser = argparse.ArgumentParser(description="Image Quality Evaluation Orchestrator")
+    _here = Path(__file__).parent
     parser.add_argument("--input", "-i",
-                        default=r"F:\AI\AItuning\需要评估的图片",
+                        default=str(_here / "需要评估的图片"),
                         help="Input directory with images to evaluate")
     parser.add_argument("--output", "-o",
-                        default=r"F:\AI\AItuning\评估报告",
+                        default=str(_here / "评估报告"),
                         help="Output directory for reports")
     args = parser.parse_args()
 

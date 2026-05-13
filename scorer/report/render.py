@@ -7,14 +7,20 @@ from ..metrics import MetricResult
 from ..aggregate import compute_total_score
 
 # Register CJK font and force it as default for all text
-_CJK_FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
-try:
-    font_manager.fontManager.addfont(_CJK_FONT_PATH)
-    _prop = font_manager.FontProperties(fname=_CJK_FONT_PATH)
-    _cjk_name = _prop.get_name()
-    matplotlib.rcParams["font.family"] = _cjk_name
-except Exception:
-    pass
+_CJK_FONT_CANDIDATES = [
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simsun.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+]
+for _fp in _CJK_FONT_CANDIDATES:
+    try:
+        font_manager.fontManager.addfont(_fp)
+        _prop = font_manager.FontProperties(fname=_fp)
+        matplotlib.rcParams["font.family"] = _prop.get_name()
+        break
+    except Exception:
+        continue
 
 # Algorithm descriptions for each metric
 _ALGO_DESCRIPTIONS = {

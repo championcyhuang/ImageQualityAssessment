@@ -114,7 +114,7 @@ def test_sharpness_blurry_image():
     result_blurry = sharpness(pp_blurry)
 
     assert result_sharp.global_score > result_blurry.global_score
-    assert "edge_width" in result_sharp.metadata
+    assert "edge_width_px" in result_sharp.metadata
 
 
 def test_noise_uniform_image():
@@ -176,7 +176,7 @@ def test_dynamic_range():
     y = np.linspace(0.02, 0.98, 64 * 64).reshape(64, 64).astype(np.float32)
     pp = make_preprocessed(y_array=y)
     result = dynamic_range(pp)
-    assert result.global_score > 30
+    assert result.global_score > 20
     assert "dr_stops" in result.metadata
 
 
@@ -194,7 +194,7 @@ def test_uniformity_perfect():
     pp = make_preprocessed()
     result = uniformity(pp)
     assert result.global_score > 70
-    assert "corner_vs_center_luma_ratio" in result.metadata
+    assert "worst_corner_ratio" in result.metadata
 
 
 def test_fringing_none():
@@ -241,7 +241,7 @@ def test_distortion_flat_image():
     result = distortion(pp)
     assert result.global_score == 80.0
     assert "直线特征不足" in result.diagnosis
-    assert "mean_deviation_px" in result.metadata
+    assert "contours_analyzed" in result.metadata
 
 
 def test_distortion_straight_edges():

@@ -12,28 +12,35 @@ import matplotlib.pyplot as plt
 from matplotlib import font_manager
 from ..metrics import MetricResult
 
-_CJK_FONT_PATH = "C:/Windows/Fonts/msyh.ttc"
-try:
-    font_manager.fontManager.addfont(_CJK_FONT_PATH)
-    matplotlib.rcParams["font.family"] = font_manager.FontProperties(fname=_CJK_FONT_PATH).get_name()
-    matplotlib.rcParams["axes.unicode_minus"] = False
-except Exception:
-    pass
+_CJK_FONT_CANDIDATES = [
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simsun.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+]
+for _fp in _CJK_FONT_CANDIDATES:
+    try:
+        font_manager.fontManager.addfont(_fp)
+        matplotlib.rcParams["font.family"] = font_manager.FontProperties(fname=_fp).get_name()
+        matplotlib.rcParams["axes.unicode_minus"] = False
+        break
+    except Exception:
+        continue
 
 _ALGO_DESCRIPTIONS = {
-    "exposure": "Y通道直方图分析，目标均值0.35-0.65，惩罚高光裁切(Y>0.95)和暗部裁切(Y<0.05)",
-    "brightness": "ITU-R BT.709感知亮度，Gamma 2.2近似，目标感知亮度~0.72(18%灰)，偏离扣分",
-    "contrast": "局部RMS对比度(8x8块std/mean) + 全局Michelson对比度(p95-p5)/(p95+p5)，各占50%",
-    "color_accuracy": "灰世界假设 — Cb/Cr色度通道偏离中性灰(0,0)的程度，delta_C = sqrt(Cb^2+Cr^2)",
-    "white_balance": "灰世界(70%)+白点(30%)双假设法，分析最亮像素(95%百分位)的色度偏移，估算光源色温",
-    "sharpness": "Laplacian方差(经典对焦测度)，cv2.Laplacian + 梯度剖面散度估算边缘宽度(简化MTF法)",
-    "noise": "ISO 15739视觉噪声法 — 平坦区SNR估计，亮度噪声+色度噪声综合评分",
-    "dynamic_range": "直方图有效像素P1-P99范围，DR = log2(p99/p01) stops，惩罚高光/暗部裁切比例",
-    "texture_preservation": "平坦区与细节区方差比值法，检测降噪是否过度抹除纹理",
-    "uniformity": "四角vs中心亮度比(镜头Shading评估)，取最差角落比值评分",
-    "fringing": "高对比度边缘邻域紫边/青边检测，Cr>0.05&Cb<-0.03/Cr<-0.03&Cb>0.03",
-    "saturation": "YCbCr色度幅值分析，chroma_mag = sqrt(Cb²+Cr²)，目标范围0.05-0.15",
-    "distortion": "轮廓直线度分析——检测长边缘、拟合直线、测量点线平均偏离，偏离越大畸变越严重",
+    "exposure": "双函数: 均值距离+裁切惩罚(60%) + 熵权曝光(40%)",
+    "brightness": "ITU-R BT.709感知亮度，Gamma 2.2近似，目标感知亮度~0.72",
+    "contrast": "双函数: 局部RMS(8×8块) + 全局Michelson(p95-p5)/(p95+p5)",
+    "color_accuracy": "灰世界假设 — Cb/Cr色度通道偏离中性灰的程度",
+    "white_balance": "三函数: 灰世界(45%)+白点(20%)+边缘色度一致性(35%)",
+    "sharpness": "三函数: Laplacian方差(40%)+边缘宽度(30%)+梯度均值(30%)",
+    "noise": "三函数: 平坦区SNR(40%)+小波噪声(35%)+局部标准差(25%)",
+    "dynamic_range": "双函数: 全局DR(60%)+9宫格区域DR(40%)",
+    "texture_preservation": "双函数: 方差比(50%)+梯度双峰分离度(50%)",
+    "uniformity": "双函数: 四角/中心比(50%)+2D二次曲面拟合(50%)",
+    "fringing": "边缘邻域紫边(Cr>0.05&Cb<-0.03)/青边(Cr<-0.03&Cb>0.03)像素占比",
+    "saturation": "YCbCr色度幅值分析，chroma_mag = sqrt(Cb²+Cr²)",
+    "distortion": "双函数: 轮廓直线度偏离(60%)+Hough角度集中度(40%)",
 }
 
 _METRIC_CN = {
@@ -289,6 +296,28 @@ def _sc_tab(score: float) -> str:
     return "#24584c" if score >= 70 else "#cf7235" if score >= 50 else "#c44a3f"
 
 
+_SUB_FUNCTIONS = {
+    "exposure":    [("均值距离 + 裁切惩罚", 0.60), ("熵权曝光（高熵内容区加权）", 0.40)],
+    "brightness":  [("BT.709 Gamma 2.2 感知亮度", 1.00)],
+    "contrast":    [("局部 RMS 对比度 (8×8块)", 0.50), ("全局 Michelson 对比度", 0.50)],
+    "color_accuracy": [("灰世界 Cb/Cr 偏离中性灰", 1.00)],
+    "white_balance": [("灰世界假设", 0.45), ("白点假设（95%最亮像素）", 0.20),
+                      ("边缘色度一致性 Van de Weijer", 0.35)],
+    "sharpness":   [("Laplacian 方差（经典对焦测度）", 0.40), ("边缘宽度估计（简化 MTF）", 0.30),
+                    ("梯度幅值均值", 0.30)],
+    "noise":       [("平坦区 SNR (ISO 15739)", 0.40), ("Haar 小波多尺度噪声", 0.35),
+                    ("局部标准差中位数", 0.25)],
+    "dynamic_range": [("全局 P1-P99 DR (stops)", 0.60), ("9宫格区域 DR 均值", 0.40)],
+    "texture_preservation": [("平坦/细节方差比", 0.50), ("梯度双峰分离度 Cohen's d", 0.50)],
+    "uniformity":  [("四角/中心亮度比", 0.50), ("2D 二次曲面拟合残差", 0.50)],
+    "fringing":    [("紫边: Cr>0.05, Cb<-0.03", 0.50), ("青边: Cr<-0.03, Cb>0.03", 0.50)],
+    "saturation":  [("YCbCr 色度幅值分析", 1.00)],
+    "distortion":  [("轮廓直线度偏离", 0.60), ("Hough 角度集中度投票", 0.40)],
+}
+_SUB_COLORS = ["#24584c", "#3d7b6b", "#cf7235", "#e59a58", "#3a6b8c",
+               "#5e7178", "#c44a3f", "#da6e64"]
+
+
 def render_multi_report(all_results: list[dict], comparison_pairs: list[dict], output_path: str):
     """Render multi-tab HTML report for one or more evaluated images.
 
@@ -308,7 +337,7 @@ def render_multi_report(all_results: list[dict], comparison_pairs: list[dict], o
     p.append("<div class='brand'><div class='brand-mark'>IQ</div>")
     p.append("<div><div class='brand-title'>Image Quality Scoring</div>")
     p.append(f"<div class='brand-sub'>{len(all_results)} image(s) evaluated</div></div></div>")
-    p.append(f"<div style='font-size:0.84rem;color:var(--muted)'>12 metrics &middot; AItuning</div>")
+    p.append(f"<div style='font-size:0.84rem;color:var(--muted)'>13 metrics &middot; AItuning</div>")
     p.append("</div></div>")
 
     # ── Tab navigation ──
@@ -353,7 +382,7 @@ def render_multi_report(all_results: list[dict], comparison_pairs: list[dict], o
         ok_count = sum(1 for m in results if m.global_score >= 60)
         bad_count = sum(1 for m in results if m.global_score < 40)
         sc_bg = _sc_bg(total)
-        p.append(f"<a href='javascript:void(0)' onclick=\"document.getElementById('tab-img{i}').checked=true\" class='summary-card'>")
+        p.append(f"<a href='javascript:void(0)' onclick=\"switchTab('tab-img{i}')\" class='summary-card'>")
         p.append("<div class='summary-top'>")
         p.append(f"<div class='summary-name'>{r['name']}</div>")
         p.append(f"<div class='summary-score' style='color:{_sc(total)}'>{total:.1f}</div>")
@@ -365,7 +394,23 @@ def render_multi_report(all_results: list[dict], comparison_pairs: list[dict], o
         p.append(f"<div class='summary-stat'><div class='sv' style='color:var(--green)'>{ok_count}</div><div class='sl'>Pass</div></div>")
         p.append(f"<div class='summary-stat'><div class='sv' style='color:var(--red)'>{bad_count}</div><div class='sl'>Critical</div></div>")
         p.append("</div></a>")
-    p.append("</div>")
+    p.append("</div>")  # end summary-grid
+
+    # Algorithm Reference — inside Summary panel only
+    p.append("<h2 class='section-hd'>Algorithm Reference</h2>")
+    p.append("<div class='panel'><div class='panel-inner'>")
+    p.append("<table class='compare-table'>")
+    p.append("<tr><th style='width:16%'>Metric</th><th>Algorithm</th></tr>")
+    ref_res = all_results[0]["results"] if all_results else []
+    for m in ref_res:
+        cn = _METRIC_CN.get(m.name, m.name)
+        desc = _ALGO_DESCRIPTIONS.get(m.name, "")
+        p.append("<tr>")
+        p.append(f"<td style='font-weight:800;color:var(--green2)'>{cn}<br><span style='font-size:0.72rem;color:var(--muted)'>{m.name}</span></td>")
+        p.append(f"<td style='font-size:0.86rem;color:var(--ink);line-height:1.6;'>{desc}</td>")
+        p.append("</tr>")
+    p.append("</table></div></div>")
+
     p.append("</div>")  # end summary panel
 
     # --- Per-Image Panels ---
@@ -418,10 +463,11 @@ def render_multi_report(all_results: list[dict], comparison_pairs: list[dict], o
 
     # ── Tab switching JS ──
     p.append("<script>")
-    p.append("(function(){")
     p.append("var radios=document.querySelectorAll('.tab-radio');")
     p.append("var panels=document.querySelectorAll('.tab-panel');")
     p.append("function switchTab(id){")
+    p.append("var r=document.getElementById(id);")
+    p.append("if(r)r.checked=true;")
     p.append("panels.forEach(function(p){p.style.display='none';});")
     p.append("var panel=document.getElementById('panel-'+id.replace('tab-',''));")
     p.append("if(panel)panel.style.display='block';")
@@ -429,20 +475,8 @@ def render_multi_report(all_results: list[dict], comparison_pairs: list[dict], o
     p.append("radios.forEach(function(r){")
     p.append("r.addEventListener('change',function(){if(this.checked)switchTab(this.id);});")
     p.append("});")
-    p.append("switchTab('tab-summary');")  # initial state
-    p.append("})();")
+    p.append("switchTab('tab-summary');")
     p.append("</script>")
-
-    # ── Algorithm Reference ──
-    p.append("<h2 class='section-hd'>Algorithm Reference</h2>")
-    p.append("<div class='algo-grid'>")
-    # Use first image's results for algo ref order
-    ref_res = all_results[0]["results"] if all_results else []
-    for m in ref_res:
-        cn = _METRIC_CN.get(m.name, m.name)
-        desc = _ALGO_DESCRIPTIONS.get(m.name, "")
-        p.append(f"<div class='algo-item'><span class='aname'>{cn}</span> &mdash; {desc}</div>")
-    p.append("</div>")
 
     p.append("<div class='footer'>Image Quality Scoring System &middot; AItuning</div>")
     p.append("</div></body></html>")
