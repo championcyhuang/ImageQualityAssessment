@@ -6,7 +6,7 @@ import ImageQueue, { QueueItem } from "@/components/ImageQueue";
 import NV12Modal from "@/components/NV12Modal";
 import ReportViewer from "@/components/ReportViewer";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8002";
+const API_BASE = "/api";
 
 interface ReportResult {
   name: string;

@@ -12,7 +12,7 @@ function getPidsOnPort(port) {
     for (const line of out.trim().split("\n")) {
       const parts = line.trim().split(/\s+/);
       const pid = parts[parts.length - 1];
-      if (pid && /^\d+$/.test(pid)) pids.add(pid);
+      if (pid && /^\d+$/.test(pid) && pid !== "0") pids.add(pid);
     }
     return Array.from(pids);
   } catch {
@@ -47,11 +47,6 @@ if (hadFailures) {
   try {
     execSync("taskkill /IM python.exe /F", { stdio: "ignore", shell: true });
     console.log("[kill] Killed all python.exe processes");
-    killedAny = true;
-  } catch {}
-  try {
-    execSync("taskkill /IM node.exe /F", { stdio: "ignore", shell: true });
-    console.log("[kill] Killed all node.exe processes");
     killedAny = true;
   } catch {}
 }
