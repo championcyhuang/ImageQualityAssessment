@@ -6,14 +6,15 @@ Runs on localhost:8000. Serves:
 - GET  /reports/{id} → serve generated HTML report
 """
 
+import asyncio
 import os
 import sys
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -45,6 +46,9 @@ INPUT_DIR.mkdir(parents=True, exist_ok=True)
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".nv12"}
+
+# In-memory task storage (dev only — resets on server restart)
+eval_tasks: Dict[str, dict] = {}
 
 
 class ImageSpec(BaseModel):
@@ -96,20 +100,25 @@ async def upload(files: List[UploadFile] = File(...)):
     return {"saved": saved}
 
 
-@app.post("/evaluate")
-async def evaluate(req: EvaluateRequest):
-    """Run quality scoring pipeline for each image and generate HTML report."""
+def _do_evaluate(task_id: str, images: List[ImageSpec]):
+    """Background task: run scorer for each image and update progress."""
     report_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     out_dir = REPORT_DIR / report_id
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    task = eval_tasks[task_id]
+    task["report_id"] = report_id
+    task["report_url"] = f"/reports/{report_id}"
+
     all_results = []
     failed = []
 
-    for spec in req.images:
+    for i, spec in enumerate(images):
         img_path = _PROJECT_ROOT / spec.path
         if not img_path.exists():
             failed.append({"path": spec.path, "error": "File not found"})
+            task["failed"] = failed.copy()
+            task["completed"] = i + 1
             continue
 
         try:
@@ -120,6 +129,8 @@ async def evaluate(req: EvaluateRequest):
             )
         except Exception as exc:
             failed.append({"path": spec.path, "error": str(exc)})
+            task["failed"] = failed.copy()
+            task["completed"] = i + 1
             continue
 
         all_results.append({
@@ -130,44 +141,60 @@ async def evaluate(req: EvaluateRequest):
             "image_rgb": result.get("image_rgb"),
         })
 
-    if not all_results:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "failed": failed},
-        )
-
-    # Generate HTML report (no comparison in v1)
-    report_path = out_dir / "quality_report.html"
-    render_multi_report(all_results, [], str(report_path))
-
-    # Build response results
-    resp_results = []
-    for r in all_results:
+        # Build per-image result for progress updates
         metrics = []
-        for m in r["results"]:
+        for m in result["results"]:
             metrics.append({
                 "name": m.name,
                 "score": float(round(m.global_score, 1)),
                 "weight": float(DEFAULT_WEIGHTS.get(m.name, 1.0)),
                 "status": "excellent" if m.global_score >= 85 else "good" if m.global_score >= 60 else "warning",
             })
-        resp_results.append({
-            "name": r["name"],
-            "total_score": float(round(r["total_score"], 1)),
+        task["results"].append({
+            "name": img_path.name,
+            "total_score": float(round(result["total_score"], 1)),
             "metrics": metrics,
         })
+        task["completed"] = i + 1
 
-    status = "partial" if failed else "done"
-    response = {
-        "id": report_id,
-        "status": status,
-        "results": resp_results,
-        "report_url": f"/reports/{report_id}",
+    if not all_results:
+        task["status"] = "error"
+        return
+
+    # Generate HTML report
+    report_path = out_dir / "quality_report.html"
+    render_multi_report(all_results, [], str(report_path))
+
+    task["status"] = "partial" if failed else "done"
+
+
+@app.post("/evaluate")
+async def evaluate(req: EvaluateRequest, background_tasks: BackgroundTasks):
+    """Queue evaluation task and return task_id for polling."""
+    task_id = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    eval_tasks[task_id] = {
+        "status": "running",
+        "total": len(req.images),
+        "completed": 0,
+        "results": [],
+        "failed": [],
+        "report_id": None,
+        "report_url": None,
     }
-    if failed:
-        response["failed"] = failed
 
-    return response
+    # Run in thread pool so event loop isn't blocked
+    background_tasks.add_task(_do_evaluate, task_id, req.images)
+
+    return {"task_id": task_id, "status": "queued", "total": len(req.images)}
+
+
+@app.get("/evaluate/status/{task_id}")
+async def evaluate_status(task_id: str):
+    """Poll evaluation progress."""
+    task = eval_tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
 
 
 @app.get("/reports/{report_id}", response_class=HTMLResponse)

@@ -24,6 +24,7 @@ export default function Home() {
   const [evaluating, setEvaluating] = useState(false);
   const [reportId, setReportId] = useState<string | null>(null);
   const [results, setResults] = useState<ReportResult[]>([]);
+  const [progress, setProgress] = useState<{ completed: number; total: number } | undefined>(undefined);
   const [nv12File, setNv12File] = useState<{ name: string; resolve: (dims: { w: number; h: number } | null) => void } | null>(null);
   const inputIdRef = useRef(0);
 
@@ -45,15 +46,20 @@ export default function Home() {
     const nv12s = files.filter((f) => /\.nv12$/i.test(f.name));
 
     const newItems: QueueItem[] = [];
+    const previewMap = new Map<string, string>();
 
     if (regular.length) {
       const saved = await uploadFiles(regular);
-      saved.forEach((path) => {
+      saved.forEach((path, idx) => {
+        const file = regular[idx];
+        const previewUrl = file ? URL.createObjectURL(file) : undefined;
+        if (previewUrl) previewMap.set(path, previewUrl);
         newItems.push({
           id: `item-${++inputIdRef.current}`,
           name: path.split("/").pop() || path,
           path,
           status: "ready",
+          previewUrl,
         });
       });
     }
@@ -95,6 +101,7 @@ export default function Home() {
     if (!readyItems.length) return;
 
     setEvaluating(true);
+    setProgress({ completed: 0, total: readyItems.length });
     setQueue((prev) =>
       prev.map((q) => (q.status === "ready" ? { ...q, status: "evaluating" as const } : q))
     );
@@ -113,30 +120,56 @@ export default function Home() {
       });
 
       const data = await res.json();
-
-      if (data.status === "error") {
+      if (!res.ok || data.status === "error" || !data.task_id) {
         setQueue((prev) =>
           prev.map((q) =>
-            q.status === "evaluating" ? { ...q, status: "error" as const, error: "评估失败" } : q
+            q.status === "evaluating" ? { ...q, status: "error" as const, error: "评估启动失败" } : q
           )
         );
-        alert("评估失败: " + (data.error || "未知错误"));
+        alert("评估启动失败: " + (data.error || "未知错误"));
+        setEvaluating(false);
+        setProgress(undefined);
         return;
       }
 
-      setReportId(data.id);
-      setResults(data.results || []);
+      const taskId = data.task_id;
+      const interval = setInterval(async () => {
+        try {
+          const pollRes = await fetch(`${API_BASE}/evaluate/status/${taskId}`);
+          const pollData = await pollRes.json();
 
-      setQueue((prev) =>
-        prev.map((q) => {
-          if (q.status !== "evaluating") return q;
-          const found = data.failed?.find((f: any) => f.path === q.path);
-          if (found) {
-            return { ...q, status: "error" as const, error: found.error };
+          setProgress({ completed: pollData.completed, total: pollData.total });
+
+          // Update individual item statuses based on returned results/failed
+          setQueue((prev) => {
+            const evaluatingIds = new Set(readyItems.map((r) => r.id));
+            const resultNames = new Set((pollData.results || []).map((r: any) => r.name));
+            const failedMap = new Map((pollData.failed || []).map((f: any) => [f.path, f.error]));
+
+            return prev.map((q) => {
+              if (!evaluatingIds.has(q.id) || q.status !== "evaluating") return q;
+              if (resultNames.has(q.name)) return { ...q, status: "done" as const };
+              if (failedMap.has(q.path)) return { ...q, status: "error" as const, error: failedMap.get(q.path) };
+              return q;
+            });
+          });
+
+          if (pollData.status === "done" || pollData.status === "partial" || pollData.status === "error") {
+            clearInterval(interval);
+            setEvaluating(false);
+            setProgress(undefined);
+
+            if (pollData.status === "error") {
+              alert("评估失败: 所有图片均无法处理");
+            } else {
+              setReportId(pollData.report_id);
+              setResults(pollData.results || []);
+            }
           }
-          return { ...q, status: "done" as const };
-        })
-      );
+        } catch {
+          // Poll error — keep trying
+        }
+      }, 500);
     } catch (err: any) {
       setQueue((prev) =>
         prev.map((q) =>
@@ -144,13 +177,17 @@ export default function Home() {
         )
       );
       alert("评估请求失败: " + err.message);
-    } finally {
       setEvaluating(false);
+      setProgress(undefined);
     }
   }, [queue]);
 
   const handleRemove = useCallback((id: string) => {
-    setQueue((prev) => prev.filter((q) => q.id !== id));
+    setQueue((prev) => {
+      const item = prev.find((q) => q.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((q) => q.id !== id);
+    });
   }, []);
 
   const hasReady = queue.some((q) => q.status === "ready");
@@ -200,7 +237,7 @@ export default function Home() {
             <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--text-secondary)" }}>
               待评估队列
             </p>
-            <ImageQueue items={queue} onRemove={handleRemove} />
+            <ImageQueue items={queue} onRemove={handleRemove} progress={progress} />
           </div>
         </aside>
 

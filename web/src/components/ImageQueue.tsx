@@ -10,14 +10,16 @@ export interface QueueItem {
   height?: number;
   status: "ready" | "evaluating" | "done" | "error";
   error?: string;
+  previewUrl?: string;
 }
 
 interface ImageQueueProps {
   items: QueueItem[];
   onRemove: (id: string) => void;
+  progress?: { completed: number; total: number };
 }
 
-export default function ImageQueue({ items, onRemove }: ImageQueueProps) {
+export default function ImageQueue({ items, onRemove, progress }: ImageQueueProps) {
   if (items.length === 0) {
     return (
       <div
@@ -29,18 +31,44 @@ export default function ImageQueue({ items, onRemove }: ImageQueueProps) {
     );
   }
 
+  const showProgress = progress && progress.total > 0 && progress.completed < progress.total;
+
   return (
     <div className="space-y-2" role="list" aria-label="图片队列">
+      {showProgress && (
+        <div className="mb-3">
+          <div className="flex justify-between text-xs mb-1" style={{ color: "var(--text-secondary)" }}>
+            <span>评估进度</span>
+            <span>{progress!.completed} / {progress!.total}</span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${(progress!.completed / progress!.total) * 100}%`,
+                background: "var(--accent)",
+              }}
+            />
+          </div>
+        </div>
+      )}
       {items.map((item) => (
         <div
           key={item.id}
           role="listitem"
-          className="flex items-center justify-between rounded-[var(--radius-md)] px-3 py-2.5 border"
+          className="flex items-center gap-3 rounded-[var(--radius-md)] px-3 py-2.5 border"
           style={{
             background: "var(--bg-secondary)",
             borderColor: "var(--border)",
           }}
         >
+          {item.previewUrl && (
+            <img
+              src={item.previewUrl}
+              alt={item.name}
+              className="w-12 h-12 rounded object-cover shrink-0"
+            />
+          )}
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
               {item.name}

@@ -2,6 +2,8 @@
 
 import React from "react";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8002";
+
 interface Metric {
   name: string;
   score: number;
@@ -82,13 +84,13 @@ export default function ReportViewer({ results, reportId, loading }: ReportViewe
             style={{ borderColor: "var(--border)" }}
           >
             <iframe
-              src={`http://localhost:8000/reports/${reportId}`}
+              src={`${API_BASE}/reports/${reportId}`}
               className="w-full h-[600px]"
               title="评估报告"
             />
           </div>
           <a
-            href={`http://localhost:8000/reports/${reportId}`}
+            href={`${API_BASE}/reports/${reportId}`}
             download={`report_${reportId}.html`}
             className="inline-block mt-2 text-sm font-medium hover:underline"
             style={{ color: "var(--accent)" }}
