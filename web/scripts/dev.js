@@ -79,6 +79,7 @@ const next = spawn("pnpm", ["exec", "next", "dev", "--port", String(NEXT_PORT)],
   cwd: webDir,
   stdio: "inherit",
   shell: true,
+  env: { ...process.env, NEXT_PRIVATE_SKIP_TURBOPACK: "1" },
 });
 
 const uvicorn = spawn(
