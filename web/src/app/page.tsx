@@ -144,7 +144,7 @@ export default function Home() {
           setQueue((prev) => {
             const evaluatingIds = new Set(readyItems.map((r) => r.id));
             const resultNames = new Set((pollData.results || []).map((r: any) => r.name));
-            const failedMap = new Map((pollData.failed || []).map((f: any) => [f.path, f.error]));
+            const failedMap = new Map<string, string>((pollData.failed || []).map((f: any) => [f.path, f.error]));
 
             return prev.map((q) => {
               if (!evaluatingIds.has(q.id) || q.status !== "evaluating") return q;

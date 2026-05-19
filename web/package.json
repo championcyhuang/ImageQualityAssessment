@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.js",
+    "prod": "node scripts/prod.js",
     "kill": "node scripts/kill.js",
     "build": "next build",
     "start": "next start",
